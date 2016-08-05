@@ -188,45 +188,52 @@ class Inventory(object):
                 results.append(item)
         return results
 
-    def get_hosts(self, pattern="all", ignore_limits_and_restrictions=False):
-        """ 
+    def get_hosts(self, patterns_l="all", ignore_limits_and_restrictions=False):
+        """
         Takes a pattern or list of patterns and returns a list of matching
         inventory host names, taking into account any active restrictions
         or applied subsets
         """
 
-        # Check if pattern already computed
-        if isinstance(pattern, list):
-            pattern_hash = u":".join(pattern)
-        else:
+        # Let's have a method that takes in two different types for the same
+        # argument, they said. It'll be great, they said.
+        if not isinstance(patterns_l, list):
+            patterns_l = [patterns_l]
+
+        ret = set()
+        for pattern in patterns_l:
+            # This used to be different, but now the hash is just the pattern
             pattern_hash = pattern
 
-        if not ignore_limits_and_restrictions:
-            if self._subset:
-                pattern_hash += u":%s" % to_unicode(self._subset)
-            if self._restriction:
-                pattern_hash += u":%s" % to_unicode(self._restriction)
-
-        if pattern_hash not in HOSTS_PATTERNS_CACHE:
-
-            patterns = Inventory.split_host_pattern(pattern)
-            hosts = self._evaluate_patterns(patterns)
-
-            # mainly useful for hostvars[host] access
             if not ignore_limits_and_restrictions:
-                # exclude hosts not in a subset, if defined
                 if self._subset:
-                    subset = self._evaluate_patterns(self._subset)
-                    hosts = [ h for h in hosts if h in subset ]
+                    pattern_hash += u":%s" % to_unicode(self._subset)
+                if self._restriction:
+                    pattern_hash += u":%s" % to_unicode(self._restriction)
 
-                # exclude hosts mentioned in any restriction (ex: failed hosts)
-                if self._restriction is not None:
-                    hosts = [ h for h in hosts if h.name in self._restriction ]
+            if pattern_hash not in HOSTS_PATTERNS_CACHE:
 
-            seen = set()
-            HOSTS_PATTERNS_CACHE[pattern_hash] = [x for x in hosts if x not in seen and not seen.add(x)]
+                patterns = Inventory.split_host_pattern(pattern)
+                hosts = self._evaluate_patterns(patterns)
 
-        return HOSTS_PATTERNS_CACHE[pattern_hash][:]
+                # mainly useful for hostvars[host] access
+                if not ignore_limits_and_restrictions:
+                    # exclude hosts not in a subset, if defined
+                    if self._subset:
+                        subset = self._evaluate_patterns(self._subset)
+                        hosts = [ h for h in hosts if h in subset ]
+
+                    # exclude hosts mentioned in any restriction (ex: failed hosts)
+                    if self._restriction is not None:
+                        hosts = [ h for h in hosts if h.name in self._restriction ]
+
+                seen = set()
+                HOSTS_PATTERNS_CACHE[pattern_hash] = [x for x in hosts if x not in seen and not seen.add(x)]
+
+            for host in HOSTS_PATTERNS_CACHE[pattern_hash]:
+                ret.add(host)
+
+        return list(ret)
 
     @classmethod
     def split_host_pattern(cls, pattern):
